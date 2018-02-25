@@ -65,6 +65,9 @@ FILE_FLAGS_TO_SKIP = set( [ '-MF',
 # See Valloric/ycmd#266
 CPP_COMPILER_REGEX = re.compile( r'\+\+(-\d+(\.\d+){0,2})?$' )
 
+# Use a regex to match all the possible forms of clang-cl or cl compiler
+CL_COMPILER_REGEX = re.compile( r'(?:cl|clang-cl)(.exe)?$', re.IGNORECASE )
+
 # List of file extensions to be considered "header" files and thus not present
 # in the compilation database. The logic will try and find an associated
 # "source" file (see SOURCE_EXTENSIONS below) and use the flags for that.
@@ -242,13 +245,17 @@ def _ExtractFlagsList( flags_for_file_output ):
 
 
 def _ShouldAllowWinStyleFlags( flags ):
-  enable_windows_style_flags = False
   if OnWindows():
-    for flag in flags:
+    # Iterate in reverse because we only care
+    # about the last occurrence of --driver-mode flag.
+    for flag in reversed( flags ):
       if flag.startswith( '--driver-mode' ):
-        enable_windows_style_flags = ( flag == '--driver-mode=cl' )
+        return flag == '--driver-mode=cl'
+    # If there was no --driver-mode flag,
+    # check if we are using a compiler like clang-cl.
+    return bool( CL_COMPILER_REGEX.search( flags[ 0 ] ) )
 
-  return enable_windows_style_flags
+  return False
 
 
 def _CallExtraConfFlagsForFile( module, filename, client_data ):
@@ -422,8 +429,7 @@ def _RemoveUnusedFlags( flags, filename, enable_windows_style_flags ):
     # "foo.cpp" when we are compiling "foo.h" because the comp db doesn't have
     # flags for headers. The returned flags include "foo.cpp" and we need to
     # remove that.
-    if _SkipStrayFilenameFlag( flag,
-                               current_flag,
+    if _SkipStrayFilenameFlag( current_flag,
                                previous_flag,
                                enable_windows_style_flags ):
       continue
@@ -433,8 +439,7 @@ def _RemoveUnusedFlags( flags, filename, enable_windows_style_flags ):
   return new_flags
 
 
-def _SkipStrayFilenameFlag( flag,
-                            current_flag,
+def _SkipStrayFilenameFlag( current_flag,
                             previous_flag,
                             enable_windows_style_flags ):
   current_flag_starts_with_slash = current_flag.startswith( '/' )
@@ -445,7 +450,11 @@ def _SkipStrayFilenameFlag( flag,
 
   previous_flag_is_include = ( previous_flag in INCLUDE_FLAGS or
                                ( enable_windows_style_flags and
-                                 flag in INCLUDE_FLAGS_WIN_STYLE ) )
+                                 previous_flag in INCLUDE_FLAGS_WIN_STYLE ) )
+
+  current_flag_may_be_path = ( '/' in current_flag or
+                               ( enable_windows_style_flags and
+                                 '\\' in current_flag ) )
 
   return ( not ( current_flag_starts_with_dash or
                  ( enable_windows_style_flags and
@@ -453,7 +462,7 @@ def _SkipStrayFilenameFlag( flag,
            ( not ( previous_flag_starts_with_dash or
                    ( enable_windows_style_flags and
                      previous_flag_starts_with_slash ) ) or
-             ( not previous_flag_is_include and '/' in flag ) ) )
+             ( not previous_flag_is_include and current_flag_may_be_path ) ) )
 
 
 # Return the path to the macOS toolchain root directory to use for system

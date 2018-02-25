@@ -361,12 +361,6 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
                                                stdout = PIPE,
                                                stderr = stderr )
 
-      if not self._ServerIsRunning():
-        _logger.error( 'jdt.ls Language Server failed to start' )
-        return
-
-      _logger.info( 'jdt.ls Language Server started' )
-
       self._connection = (
         language_server_completer.StandardIOLanguageServerConnection(
           self._server_handle.stdin,
@@ -384,19 +378,14 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
         self._StopServer()
         return
 
+    _logger.info( 'jdt.ls Language Server started' )
+
     self.SendInitialize( request_data )
 
 
   def _StopServer( self ):
     with self._server_state_mutex:
       _logger.info( 'Shutting down jdt.ls...' )
-      # We don't use utils.CloseStandardStreams, because the stdin/out is
-      # connected to our server connector. Just close stderr.
-      #
-      # The other streams are closed by the LanguageServerConnection when we
-      # call Close.
-      if self._server_handle and self._server_handle.stderr:
-        self._server_handle.stderr.close()
 
       # Tell the connection to expect the server to disconnect
       if self._connection:
