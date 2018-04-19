@@ -36,8 +36,8 @@ built one.
 
 Building
 --------
-**If you're looking to develop ycmd, see the [instructions for setting up a dev
-environment][dev-setup] and for [running the tests][test-setup].**
+**If you're looking to develop ycmd, see the [instructions for running the
+tests][test-setup].**
 
 This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can
 be found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts).
@@ -228,6 +228,11 @@ The return value must be one of the following:
   - `include_paths_relative_to_dir`: (optional) the directory to which the
     include paths in the list of flags are relative. Defaults to ycmd working
     directory.
+
+  - `override_filename`: (optional) a string indicating the name of the file to
+    parse as the translation unit for the supplied file name. This fairly
+    advanced feature allows for projects that use a 'unity'-style build, or
+    for header files which depend on other includes in other files.
 
   - `do_cache`: (optional) a boolean indicating whether or not the result of
     this call (i.e. the list of flags) should be cached for this file name.

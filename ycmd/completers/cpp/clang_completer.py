@@ -1,5 +1,5 @@
 # Copyright (C) 2011-2012 Google Inc.
-#               2017      ycmd contributors
+#               2018      ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -27,14 +27,13 @@ from collections import defaultdict
 from future.utils import iteritems
 import logging
 import os.path
-import re
 import textwrap
 import xml.etree.ElementTree
 from xml.etree.ElementTree import ParseError as XmlParseError
 
 import ycm_core
 from ycmd import responses
-from ycmd.utils import ToCppStringCompatible, ToUnicode
+from ycmd.utils import re, ToBytes, ToCppStringCompatible, ToUnicode
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import ( Flags, PrepareFlagsForClang,
                                         NoCompilationDatabase,
@@ -116,8 +115,7 @@ class ClangCompleter( Completer ):
 
     # We do what GCC does for <> versus "":
     # http://gcc.gnu.org/onlinedocs/cpp/Include-Syntax.html
-    flags = self._FlagsForRequest( request_data )
-    filepath = request_data[ 'filepath' ]
+    flags, filepath = self._FlagsForRequest( request_data )
     quoted_include_paths, include_paths = UserIncludePaths( flags, filepath )
     if quoted_include:
       include_paths.extend( quoted_include_paths )
@@ -139,9 +137,9 @@ class ClangCompleter( Completer ):
 
 
   def ComputeCandidatesInner( self, request_data ):
-    filename = request_data[ 'filepath' ]
-    if not filename:
-      return
+    flags, filename = self._FlagsForRequest( request_data )
+    if not flags:
+      raise RuntimeError( NO_COMPILE_FLAGS_MESSAGE )
 
     paths = self.GetIncludePaths( request_data )
     if paths is not None:
@@ -151,16 +149,13 @@ class ClangCompleter( Completer ):
         ToCppStringCompatible( filename ) ):
       raise RuntimeError( PARSING_FILE_MESSAGE )
 
-    flags = self._FlagsForRequest( request_data )
-    if not flags:
-      raise RuntimeError( NO_COMPILE_FLAGS_MESSAGE )
-
     files = self.GetUnsavedFilesVector( request_data )
     line = request_data[ 'line_num' ]
     column = request_data[ 'start_column' ]
     with self._files_being_compiled.GetExclusive( filename ):
       results = self._completer.CandidatesForLocationInFile(
           ToCppStringCompatible( filename ),
+          ToCppStringCompatible( request_data[ 'filepath' ] ),
           line,
           column,
           files,
@@ -211,11 +206,7 @@ class ClangCompleter( Completer ):
 
 
   def _LocationForGoTo( self, goto_function, request_data, reparse = True ):
-    filename = request_data[ 'filepath' ]
-    if not filename:
-      raise ValueError( INVALID_FILE_MESSAGE )
-
-    flags = self._FlagsForRequest( request_data )
+    flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
@@ -224,6 +215,7 @@ class ClangCompleter( Completer ):
     column = request_data[ 'column_num' ]
     return getattr( self._completer, goto_function )(
         ToCppStringCompatible( filename ),
+        ToCppStringCompatible( request_data[ 'filepath' ] ),
         line,
         column,
         files,
@@ -250,9 +242,8 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation', request_data )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation', request_data )
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
+                                      request_data )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -263,13 +254,9 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation',
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
                                       request_data,
                                       reparse = False )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation',
-                                        request_data,
-                                        reparse = False )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -285,8 +272,7 @@ class ClangCompleter( Completer ):
     if not include_file_name:
       return None
 
-    flags = self._FlagsForRequest( request_data )
-    current_file_path = request_data[ 'filepath' ]
+    flags, current_file_path = self._FlagsForRequest( request_data )
     quoted_include_paths, include_paths = UserIncludePaths( flags,
                                                             current_file_path )
     if quoted_include:
@@ -318,11 +304,7 @@ class ClangCompleter( Completer ):
       func,
       response_builder = responses.BuildDisplayMessageResponse,
       reparse = True ):
-    filename = request_data[ 'filepath' ]
-    if not filename:
-      raise ValueError( INVALID_FILE_MESSAGE )
-
-    flags = self._FlagsForRequest( request_data )
+    flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
@@ -332,6 +314,7 @@ class ClangCompleter( Completer ):
 
     message = getattr( self._completer, func )(
         ToCppStringCompatible( filename ),
+        ToCppStringCompatible( request_data[ 'filepath' ] ),
         line,
         column,
         files,
@@ -347,11 +330,7 @@ class ClangCompleter( Completer ):
     self._flags.Clear()
 
   def _FixIt( self, request_data ):
-    filename = request_data[ 'filepath' ]
-    if not filename:
-      raise ValueError( INVALID_FILE_MESSAGE )
-
-    flags = self._FlagsForRequest( request_data )
+    flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
@@ -361,6 +340,7 @@ class ClangCompleter( Completer ):
 
     fixits = getattr( self._completer, "GetFixItsForLocationInFile" )(
         ToCppStringCompatible( filename ),
+        ToCppStringCompatible( request_data[ 'filepath' ] ),
         line,
         column,
         files,
@@ -373,11 +353,7 @@ class ClangCompleter( Completer ):
     return responses.BuildFixItResponse( fixits )
 
   def OnFileReadyToParse( self, request_data ):
-    filename = request_data[ 'filepath' ]
-    if not filename:
-      raise ValueError( INVALID_FILE_MESSAGE )
-
-    flags = self._FlagsForRequest( request_data )
+    flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
@@ -394,6 +370,15 @@ class ClangCompleter( Completer ):
 
 
   def OnBufferUnload( self, request_data ):
+    # FIXME: The filepath here is (possibly) wrong when overriding the
+    # translation unit filename. If the buffer that the user closed is not the
+    # "translation unit" filename, then we won't close the unit. It would
+    # require the user to open the translation unit file, and close that.
+    # Incidentally, doing so would flush the unit for any _other_ open files
+    # which use that translation unit.
+    #
+    # Solving this would require remembering the graph of files to translation
+    # units and only closing a unit when there are no files open which use it.
     self._completer.DeleteCachesForFile(
         ToCppStringCompatible( request_data[ 'filepath' ] ) )
 
@@ -431,15 +416,16 @@ class ClangCompleter( Completer ):
       # Note that it only raises NoExtraConfDetected:
       #  - when extra_conf is None and,
       #  - there is no compilation database
-      flags = self._FlagsForRequest( request_data ) or []
+      flags, filename = self._FlagsForRequest( request_data ) or []
     except ( NoExtraConfDetected, UnknownExtraConf ):
       # If _FlagsForRequest returns None or raises, we use an empty list in
       # practice.
       flags = []
+      filename = request_data[ 'filepath' ]
 
     try:
       database_directory = self._flags.FindCompilationDatabase(
-          os.path.dirname( request_data[ 'filepath' ] ) ).database_directory
+          os.path.dirname( filename ) ).database_directory
     except NoCompilationDatabase:
       database_directory = None
 
@@ -448,17 +434,27 @@ class ClangCompleter( Completer ):
       value = '{0}'.format( database_directory ) )
     flags_item = responses.DebugInfoItem(
       key = 'flags', value = '{0}'.format( list( flags ) ) )
+    filename_item = responses.DebugInfoItem(
+      key = 'translation unit', value = filename )
 
     return responses.BuildDebugInfoResponse( name = 'C-family',
                                              items = [ database_item,
-                                                       flags_item ] )
+                                                       flags_item,
+                                                       filename_item ] )
 
 
   def _FlagsForRequest( self, request_data ):
     filename = request_data[ 'filepath' ]
+    if not filename:
+      raise INVALID_FILE_MESSAGE
+
     if 'compilation_flags' in request_data:
-      return PrepareFlagsForClang( request_data[ 'compilation_flags' ],
-                                   filename )
+      # Not supporting specifying the translation unit using this method as it
+      # is only used by the tests.
+      return ( PrepareFlagsForClang( request_data[ 'compilation_flags' ],
+                                     filename ),
+               filename )
+
     client_data = request_data.get( 'extra_conf_data', None )
     return self._flags.FlagsForFile( filename, client_data = client_data )
 
@@ -553,7 +549,11 @@ def _BuildGetDocResponse( doc_data ):
   # useful pieces of documentation available to the developer. Perhaps in
   # future, we can use this XML for more interesting things.
   try:
-    root = xml.etree.ElementTree.fromstring( doc_data.comment_xml )
+    # Only python2 actually requires bytes here.
+    # Doing the same on python3 makes the code simpler,
+    # but introduces unnecessary, though quite acceptable overhead
+    # (compared to XML processing).
+    root = xml.etree.ElementTree.fromstring( ToBytes( doc_data.comment_xml ) )
   except XmlParseError:
     raise ValueError( NO_DOCUMENTATION_MESSAGE )
 

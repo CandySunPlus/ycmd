@@ -59,41 +59,55 @@ public:
     const std::vector< UnsavedFile > &unsaved_files );
 
   YCM_EXPORT std::vector< CompletionData > CandidatesForLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files );
 
   YCM_EXPORT Location GetDeclarationLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   YCM_EXPORT Location GetDefinitionLocation(
+    const std::string &filename,
+    int line,
+    int column,
+    const std::vector< UnsavedFile > &unsaved_files,
+    bool reparse = true );
+
+  YCM_EXPORT Location GetDefinitionOrDeclarationLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   YCM_EXPORT std::string GetTypeAtLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   YCM_EXPORT std::string GetEnclosingFunctionAtLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   std::vector< FixIt > GetFixItsForLocationInFile(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   YCM_EXPORT DocumentationData GetDocsForLocationInFile(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
@@ -107,13 +121,16 @@ private:
 
   void UpdateLatestDiagnostics();
 
-  CXCursor GetCursor( int line, int column );
+  CXCursor GetCursor( const std::string& filename, int line, int column );
+
+  // These two methods must be called under the clang_access_mutex_ lock.
+  Location GetDeclarationLocationForCursor( CXCursor cursor );
+
+  Location GetDefinitionLocationForCursor( CXCursor cursor );
 
   /////////////////////////////
   // PRIVATE MEMBER VARIABLES
   /////////////////////////////
-
-  std::string filename_;
 
   std::mutex diagnostics_mutex_;
   std::vector< Diagnostic > latest_diagnostics_;

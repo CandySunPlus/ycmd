@@ -79,11 +79,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.11.0'
-JDTLS_BUILD_STAMP = '201801162212'
+JDTLS_MILESTONE = '0.15.0'
+JDTLS_BUILD_STAMP = '201803152351'
 JDTLS_SHA256 = (
-  '5afa45d1ba3d38d4c6c9ef172874b430730ee168db365c5e5209b39d53deab23'
+  '4fe3ca50d2b7011f7323863bdf77a16979e5d3a2a534d69e1ef32742cc443061'
 )
+
+REGEX_MODULE_VERSION = '2018.02.21'
 
 
 def OnMac():
@@ -155,10 +157,8 @@ def NumCores():
 
 
 def CheckCall( args, **kwargs ):
-  quiet = kwargs.get( 'quiet', False )
-  kwargs.pop( 'quiet', None )
-  status_message = kwargs.get( 'status_message', None )
-  kwargs.pop( 'status_message', None )
+  quiet = kwargs.pop( 'quiet', False )
+  status_message = kwargs.pop( 'status_message', None )
 
   if quiet:
     _CheckCallQuiet( args, status_message, **kwargs )
@@ -181,8 +181,7 @@ def _CheckCallQuiet( args, status_message, **kwargs ):
 
 
 def _CheckCall( args, **kwargs ):
-  exit_message = kwargs.get( 'exit_message', None )
-  kwargs.pop( 'exit_message', None )
+  exit_message = kwargs.pop( 'exit_message', None )
   stdout = kwargs.get( 'stdout', None )
 
   try:
@@ -296,12 +295,12 @@ def CustomPythonCmakeArgs( args ):
 
 
 def GetGenerator( args ):
+  if args.ninja:
+    return 'Ninja'
   if OnWindows():
     return 'Visual Studio {version}{arch}'.format(
         version = args.msvc,
         arch = ' Win64' if platform.architecture()[ 0 ] == '64bit' else '' )
-  if PathToFirstExistingExecutable( ['ninja'] ):
-    return 'Ninja'
   return 'Unix Makefiles'
 
 
@@ -327,9 +326,11 @@ def ParseArguments():
   parser.add_argument( '--system-libclang', action = 'store_true',
                        help = 'Use system libclang instead of downloading one '
                        'from llvm.org. NOT RECOMMENDED OR SUPPORTED!' )
-  parser.add_argument( '--msvc', type = int, choices = [ 12, 14, 15 ],
+  parser.add_argument( '--msvc', type = int, choices = [ 14, 15 ],
                        default = 15, help = 'Choose the Microsoft Visual '
                        'Studio version (default: %(default)s).' )
+  parser.add_argument( '--ninja', action = 'store_true',
+                       help = 'Use Ninja build system.' )
   parser.add_argument( '--all',
                        action = 'store_true',
                        help   = 'Enable all supported completers',
@@ -351,6 +352,9 @@ def ParseArguments():
                        action = 'store_true',
                        help = 'Quiet installation mode. Just print overall '
                               'progress and errors' )
+  parser.add_argument( '--skip-build',
+                       action = 'store_true',
+                       help = "Don't build ycm_core lib, just install deps" )
 
 
   # These options are deprecated.
@@ -361,11 +365,12 @@ def ParseArguments():
   parser.add_argument( '--racer-completer', action = 'store_true',
                        help = argparse.SUPPRESS )
   parser.add_argument( '--tern-completer', action = 'store_true',
-                       help = argparse.SUPPRESS ),
+                       help = argparse.SUPPRESS )
 
   args = parser.parse_args()
 
-  if args.enable_coverage:
+  # coverage is not supported for c++ on MSVC
+  if not OnWindows() and args.enable_coverage:
     # We always want a debug build when running with coverage enabled
     args.enable_debug = True
 
@@ -398,9 +403,6 @@ def GetCmakeArgs( parsed_args ):
 
   use_python2 = 'ON' if PY_MAJOR == 2 else 'OFF'
   cmake_args.append( '-DUSE_PYTHON2=' + use_python2 )
-
-  if OnCiService():
-    cmake_args.append( '-DUSE_LIBCLANG_PACKAGE=ON' )
 
   extra_cmake_args = os.environ.get( 'EXTRA_CMAKE_ARGS', '' )
   # We use shlex split to properly parse quoted CMake arguments.
@@ -528,6 +530,30 @@ def BuildYcmdLib( args ):
       print( 'The build files are in: ' + build_dir )
     else:
       rmtree( build_dir, ignore_errors = OnCiService() )
+
+
+def InstallRegexModule( args ):
+  regex_dir = p.join( DIR_OF_THIRD_PARTY, 'regex', 'py{}'.format( PY_MAJOR ) )
+  pip_command = [ sys.executable, '-m', 'pip', 'install', '--upgrade',
+                  'regex=={}'.format( REGEX_MODULE_VERSION ), '-t', regex_dir ]
+  # We need to add the --system option on Debian-like distributions. See
+  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=830892
+  try:
+    pip_help_output = subprocess.check_output( pip_command + [ '--help' ],
+                                               stderr = subprocess.STDOUT )
+    if '--system' in pip_help_output.decode( 'utf8' ):
+      pip_command.append( '--system' )
+  except subprocess.CalledProcessError:
+    pass
+
+  # Do not exit if installing the regex module fails; ycmd is still usable
+  # without this module.
+  try:
+    CheckCall( pip_command,
+               quiet = args.quiet,
+               status_message = 'Installing regex module' )
+  except SystemExit:
+    pass
 
 
 def EnableCsCompleter( args ):
@@ -686,9 +712,11 @@ def WritePythonUsedDuringBuild():
 
 def Main():
   args = ParseArguments()
-  ExitIfYcmdLibInUseOnWindows()
-  BuildYcmdLib( args )
-  WritePythonUsedDuringBuild()
+  if not args.skip_build:
+    ExitIfYcmdLibInUseOnWindows()
+    BuildYcmdLib( args )
+    InstallRegexModule( args )
+    WritePythonUsedDuringBuild()
   if args.cs_completer or args.omnisharp_completer or args.all_completers:
     EnableCsCompleter( args )
   if args.go_completer or args.gocode_completer or args.all_completers:
