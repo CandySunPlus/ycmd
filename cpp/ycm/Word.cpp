@@ -37,8 +37,9 @@ std::vector< std::string > BreakCodePointsIntoCharacters(
   // automatically satisfied.
 
   auto code_point_pos = code_points.begin();
-  if ( code_point_pos == code_points.end() )
+  if ( code_point_pos == code_points.end() ) {
     return characters;
+  }
 
   std::string character;
   character.append( ( *code_point_pos )->Normal() );
@@ -50,7 +51,7 @@ std::vector< std::string > BreakCodePointsIntoCharacters(
     return characters;
   }
 
-  int regional_indicator_nb = 0;
+  bool is_regional_indicator_nb_odd = false;
   bool within_emoji_modifier = false;
 
   for ( ; code_point_pos != code_points.end() ; ++previous_code_point_pos,
@@ -221,7 +222,6 @@ std::vector< std::string > BreakCodePointsIntoCharacters(
         }
         break;
       case BreakProperty::REGIONAL_INDICATOR:
-        regional_indicator_nb += 1;
         switch( property ) {
           // Rule GB9: do not break before extending characters or when using a
           // zero-width joiner (ZWJ).
@@ -230,13 +230,14 @@ std::vector< std::string > BreakCodePointsIntoCharacters(
           // Rule GB9a: do not break before spacing marks.
           case BreakProperty::SPACINGMARK:
             character.append( code_point );
-            regional_indicator_nb = 0;
+            is_regional_indicator_nb_odd = false;
             break;
           // Rules GB12 and GB13: do not break within emoji flag sequences. That
           // is, do not break between regional indicator (RI) symbols if there
           // is an odd number of RI characters before the break point.
           case BreakProperty::REGIONAL_INDICATOR:
-            if ( regional_indicator_nb % 2 == 1 ) {
+            is_regional_indicator_nb_odd = !is_regional_indicator_nb_odd;
+            if ( is_regional_indicator_nb_odd ) {
               character.append( code_point );
             } else {
               characters.push_back( character );
@@ -246,7 +247,7 @@ std::vector< std::string > BreakCodePointsIntoCharacters(
           default:
             characters.push_back( character );
             character = code_point;
-            regional_indicator_nb = 0;
+            is_regional_indicator_nb_odd = false;
         }
         break;
       default:
