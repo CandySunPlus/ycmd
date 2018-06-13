@@ -38,41 +38,41 @@ def _ExtractPatternsFromFiletypeTriggerDict( triggerDict ):
   two filetype trigger dictionaries."""
   copy = triggerDict.copy()
   for key, values in iteritems( triggerDict ):
-    copy[ key ] = set( [ sre_pattern.pattern for sre_pattern in values ] )
+    copy[ key ] = { sre_pattern.pattern for sre_pattern in values }
   return copy
 
 
 def FiletypeTriggerDictFromSpec_Works_test():
   eq_( defaultdict( set, {
-         'foo': set( [ cu._PrepareTrigger( 'zoo').pattern,
-                       cu._PrepareTrigger( 'bar' ).pattern ] ),
-         'goo': set( [ cu._PrepareTrigger( 'moo' ).pattern ] ),
-         'moo': set( [ cu._PrepareTrigger( 'moo' ).pattern ] ),
-         'qux': set( [ cu._PrepareTrigger( 'q' ).pattern ] )
+         'foo': { cu._PrepareTrigger( 'zoo' ).pattern,
+                  cu._PrepareTrigger( 'bar' ).pattern },
+         'goo': { cu._PrepareTrigger( 'moo' ).pattern },
+         'moo': { cu._PrepareTrigger( 'moo' ).pattern },
+         'qux': { cu._PrepareTrigger( 'q' ).pattern }
        } ),
        _ExtractPatternsFromFiletypeTriggerDict(
          cu._FiletypeTriggerDictFromSpec( {
-           'foo': ['zoo', 'bar'],
-           'goo,moo': ['moo'],
-           'qux': ['q']
+           'foo': [ 'zoo', 'bar' ],
+           'goo,moo': [ 'moo' ],
+           'qux': [ 'q' ]
          } ) ) )
 
 
 def FiletypeDictUnion_Works_test():
   eq_( defaultdict( set, {
-         'foo': set(['zoo', 'bar', 'maa']),
-         'goo': set(['moo']),
-         'bla': set(['boo']),
-         'qux': set(['q'])
+         'foo': { 'zoo', 'bar', 'maa' },
+         'goo': { 'moo' },
+         'bla': { 'boo' },
+         'qux': { 'q' }
        } ),
        cu._FiletypeDictUnion( defaultdict( set, {
-         'foo': set(['zoo', 'bar']),
-         'goo': set(['moo']),
-         'qux': set(['q'])
+         'foo': { 'zoo', 'bar' },
+         'goo': { 'moo' },
+         'qux': { 'q' }
        } ), defaultdict( set, {
-         'foo': set(['maa']),
-         'bla': set(['boo']),
-         'qux': set(['q'])
+         'foo': { 'maa' },
+         'bla': { 'boo' },
+         'qux': { 'q' }
        } ) ) )
 
 
@@ -193,7 +193,7 @@ def PreparedTriggers_OnlySomeFiletypesSelected_test():
 
 
 def PreparedTriggers_UserTriggers_test():
-  triggers = cu.PreparedTriggers( user_trigger_map = { 'c': ['->'] } )
+  triggers = cu.PreparedTriggers( user_trigger_map = { 'c': [ '->' ] } )
 
   ok_( triggers.MatchesForFiletype( 'foo->bar', 5, 8, 'c' ) )
   eq_( triggers.MatchingTriggerForFiletype( 'foo->bar', 5, 8, 'c' ).pattern,

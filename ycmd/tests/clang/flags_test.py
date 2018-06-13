@@ -37,6 +37,7 @@ from ycmd.completers.cpp.flags import _ShouldAllowWinStyleFlags
 from hamcrest import ( assert_that,
                        calling,
                        contains,
+                       empty,
                        equal_to,
                        has_item,
                        not_,
@@ -46,10 +47,23 @@ from hamcrest import ( assert_that,
 @contextlib.contextmanager
 def MockExtraConfModule( flags_for_file_function ):
   module = MagicMock( spec = ModuleType )
+  module.is_global_ycm_extra_conf = False
   module.FlagsForFile = flags_for_file_function
   with patch( 'ycmd.extra_conf_store.ModuleForSourceFile',
               return_value = module ):
     yield
+
+
+def FlagsForFile_NothingReturned_test():
+  flags_object = flags.Flags()
+
+  def FlagsForFile( filename ):
+    pass
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list, filename = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, empty() )
+    assert_that( filename, equal_to( '/foo' ) )
 
 
 def FlagsForFile_FlagsNotReady_test():
@@ -820,7 +834,7 @@ def CompilationDatabase_NoDatabase_test():
 
 
 def CompilationDatabase_FileNotInDatabase_test():
-  compile_commands = [ ]
+  compile_commands = []
   with TemporaryTestDir() as tmp_dir:
     with TemporaryClangProject( tmp_dir, compile_commands ):
       eq_(
@@ -977,6 +991,28 @@ def CompilationDatabase_ExplicitHeaderFileEntry_test():
                   '-x',
                   'c++',
                   '-I' + os.path.normpath( '/absolute/path' ),
+                  '-Wall' ) )
+
+
+def CompilationDatabase_CUDALanguageFlags_test():
+  with TemporaryTestDir() as tmp_dir:
+    compile_commands = [
+      {
+        'directory': tmp_dir,
+        'command': 'clang++ -Wall {}'.format( './test.cu' ),
+        'file': os.path.join( tmp_dir, 'test.cu' ),
+      },
+    ]
+
+    with TemporaryClangProject( tmp_dir, compile_commands ):
+      # If we ask for a header file, it returns the equivalent cu file
+      assert_that(
+        flags.Flags().FlagsForFile(
+          os.path.join( tmp_dir, 'test.h' ),
+          add_extra_clang_flags = False )[ 0 ],
+        contains( 'clang++',
+                  '-x',
+                  'cuda',
                   '-Wall' ) )
 
 
