@@ -379,6 +379,8 @@ def ParseArguments():
                        help = argparse.SUPPRESS )
   parser.add_argument( '--tern-completer', action = 'store_true',
                        help = argparse.SUPPRESS )
+  parser.add_argument( '--js-completer', action = 'store_true',
+                       help = argparse.SUPPRESS )
 
   args = parser.parse_args()
 
