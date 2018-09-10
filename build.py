@@ -9,6 +9,7 @@ from __future__ import absolute_import
 
 from shutil import rmtree
 from tempfile import mkdtemp
+import argparse
 import errno
 import hashlib
 import multiprocessing
@@ -43,10 +44,8 @@ for folder in os.listdir( DIR_OF_THIRD_PARTY ):
                                                             DIR_OF_THIRD_PARTY )
     )
 
-sys.path.insert( 1, p.abspath( p.join( DIR_OF_THIRD_PARTY, 'argparse' ) ) )
 sys.path.insert( 1, p.abspath( p.join( DIR_OF_THIRD_PARTY, 'requests' ) ) )
 
-import argparse
 import requests
 
 NO_DYNAMIC_PYTHON_ERROR = (
@@ -609,12 +608,17 @@ def EnableCsCompleter( args ):
 def EnableGoCompleter( args ):
   go = FindExecutableOrDie( 'go', 'go is required to build gocode.' )
 
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'gocode' ) )
+  go_dir = p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'go' )
+  os.chdir( p.join( go_dir, 'src', 'github.com', 'mdempsky', 'gocode' ) )
+  new_env = os.environ.copy()
+  new_env[ 'GOPATH' ] = go_dir
   CheckCall( [ go, 'build' ],
+             env = new_env,
              quiet = args.quiet,
              status_message = 'Building gocode for go completion' )
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'godef' ) )
-  CheckCall( [ go, 'build', 'godef.go' ],
+  os.chdir( p.join( go_dir, 'src', 'github.com', 'rogpeppe', 'godef' ) )
+  CheckCall( [ go, 'build' ],
+             env = new_env,
              quiet = args.quiet,
              status_message = 'Building godef for go definition' )
 
