@@ -326,10 +326,6 @@ def ParseArguments():
                        help = 'Enable Go semantic completion engine.' )
   parser.add_argument( '--rust-completer', action = 'store_true',
                        help = 'Enable Rust semantic completion engine.' )
-  parser.add_argument( '--js-completer', action = 'store_true',
-                       help = 'Enable JavaScript semantic completion engine.' ),
-  parser.add_argument( '--vue-completer', action = 'store_true',
-                       help = 'Enable Vue semantic completion engine.' ),
   parser.add_argument( '--java-completer', action = 'store_true',
                        help = 'Enable Java semantic completion engine.' ),
   parser.add_argument( '--ts-completer', action = 'store_true',
@@ -676,17 +672,6 @@ def EnableJavaScriptCompleter( args ):
              quiet = args.quiet,
              status_message = 'Setting up Tern for JavaScript completion' )
 
-def EnableVueCompleter( args ):
-  # On Debian-based distributions, node is by default installed as nodejs.
-  node = PathToFirstExistingExecutable( [ 'nodejs', 'node' ] )
-  if not node:
-    sys.exit( 'ERROR: node is required to set up Vls.' )
-  npm = FindExecutableOrDie( 'npm', 'ERROR: npm is required to set up Vls.' )
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'vls' ) )
-  CheckCall( [ npm, 'install', '--production' ],
-             quiet = args.quiet,
-             status_message = 'Setting up Vls for Vue completion' )
-
 
 def EnableJavaCompleter( switches ):
   def Print( *args, **kwargs ):
@@ -780,8 +765,6 @@ def Main():
     EnableGoCompleter( args )
   if args.js_completer or args.tern_completer or args.all_completers:
     EnableJavaScriptCompleter( args )
-  if args.vue_completer or args.all_completers:
-    EnableVueCompleter( args )
   if args.rust_completer or args.racer_completer or args.all_completers:
     EnableRustCompleter( args )
   if args.java_completer or args.all_completers:
